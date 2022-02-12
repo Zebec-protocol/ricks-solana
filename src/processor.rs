@@ -33,16 +33,18 @@ impl Processor {
         let token_program_id = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let pda = next_account_info(account_info_iter)?; // token mint address 
         let spl_token_mint = next_account_info(account_info_iter)?;  // spl token address generated from SPLTOKENPREFIX, nft_owner, pda and program id
-        let spl_associated_token = next_account_info(account_info_iter)?; // pda associated of spl_token_mint 
+        let spl_associated_token = next_account_info(account_info_iter)?; // nft owner associated of spl_token_mint 
         let nft_mint = next_account_info(account_info_iter)?;  // mint address of nft
+        let nft_vault = next_account_info(account_info_iter)?;  // nft vault address from NFTPREFIX, nft_owner, pda and program id
         let nft_associated_address = next_account_info(account_info_iter)?; // address generated from nft_vault_address and nft mint address
         let spl_vault_associated_address = next_account_info(account_info_iter)?; // address generated from nft_vault_address and spl token mint address
         let nft_spl_owner_address = next_account_info(account_info_iter)?; // // nft/token vault address generated from NFTPREFIX, nft_owner, pda and program id
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
+        let nft_owner_nft_associated = next_account_info(account_info_iter)?;  // nft owner nft id
         let rent_info  = next_account_info(account_info_iter)?; // rent 
         let system_program = next_account_info(account_info_iter)?;
 
-        let (spl_token_address, bump_seed) = generate_pda_and_bump_seed(
+        let (spl_token_address, bump_seed_spl) = generate_pda_and_bump_seed(
             SPLTOKENPREFIX,
             nft_owner.key,
             pda.key,
@@ -52,7 +54,7 @@ impl Processor {
             SPLTOKENPREFIX.as_bytes(),
             &nft_owner.key.to_bytes(),
             &pda.key.to_bytes(),
-            &[bump_seed],
+            &[bump_seed_spl],
         ];
         let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
             NFTPREFIX,
@@ -76,23 +78,28 @@ impl Processor {
             system_program,
             pda
         )?;
-        create_account_signed(nft_owner, 0.0014616 as u64, 82, token_program_id.key,system_program, spl_token_mint,spl_token_signer_seeds)?;
+
+        create_account_signed(nft_owner, 1000000000, 82, token_program_id.key,system_program, spl_token_mint,spl_token_signer_seeds)?;
+       msg!("Initialize mint");
         invoke_signed(
             &spl_token::instruction::initialize_mint(
                 token_program_id.key,
                 spl_token_mint.key,
                 nft_owner.key,
                 Some(nft_owner.key),
-                0)?,
+                9)?,
                 &[
                     token_program_id.clone(),
                     nft_owner.clone(),
                     nft_owner.clone(),
                     spl_token_mint.clone(),
-                    system_program.clone()
+                    system_program.clone(),
+                    rent_info.clone()
                 ],&[spl_token_signer_seeds]
             )?;
         // nft owner associated token using spl token mint
+        msg!("Create associated token");
+        msg!("{}ss {}s {}",spl_associated_token.key,associated_token_info.key,spl_token_mint.key);
         invoke_signed(            
             &spl_associated_token_account::create_associated_token_account(
                 nft_owner.key,
@@ -109,6 +116,7 @@ impl Processor {
                 system_program.clone()
             ],&[spl_token_signer_seeds]
         )?;
+        msg!("minting token");
         invoke_signed(
             &spl_token::instruction::mint_to_checked(
                 token_program_id.key,
@@ -124,36 +132,38 @@ impl Processor {
                 spl_associated_token.clone(),
                 nft_owner.clone(),
                 nft_owner.clone(),
-                system_program.clone()
+                system_program.clone(),
+                rent_info.clone()
             ],&[spl_token_signer_seeds]
         )?;
         if nft_associated_address.data_is_empty(){
             invoke(            
                 &spl_associated_token_account::create_associated_token_account(
                     nft_owner.key,
-                    nft_owner.key,
+                    nft_vault.key,
                     nft_mint.key,
                 ),&[
                     nft_owner.clone(),
                     nft_associated_address.clone(),
-                    nft_owner.clone(),
-                    pda.clone(),
+                    nft_vault.clone(),
+                    nft_mint.clone(),
                     token_program_id.clone(),
                     rent_info.clone(),
                     associated_token_info.clone(),
                     system_program.clone()
                 ]
             )?;
+            msg!("ssshhh");
             invoke(            
                 &spl_associated_token_account::create_associated_token_account(
                     nft_owner.key,
-                    nft_owner.key,
+                    nft_vault.key,
                     spl_token_mint.key,
                 ),&[
                     nft_owner.clone(),
-                    nft_associated_address.clone(),
-                    nft_owner.clone(),
-                    pda.clone(),
+                    spl_vault_associated_address.clone(),
+                    nft_vault.clone(),
+                    spl_token_mint.clone(),
                     token_program_id.clone(),
                     rent_info.clone(),
                     associated_token_info.clone(),
@@ -164,7 +174,7 @@ impl Processor {
         invoke(
             &spl_token::instruction::transfer(
                 token_program_id.key,
-                nft_spl_owner_address.key,
+                nft_owner_nft_associated.key,
                 nft_associated_address.key,
                 nft_owner.key,
                 &[nft_owner.key],
@@ -181,7 +191,7 @@ impl Processor {
         invoke(
             &spl_token::instruction::transfer(
                 token_program_id.key,
-                nft_spl_owner_address.key,
+                spl_associated_token.key,
                 spl_vault_associated_address.key,
                 nft_owner.key,
                 &[nft_owner.key],
@@ -189,7 +199,7 @@ impl Processor {
             )?,
             &[
                 token_program_id.clone(),
-                nft_spl_owner_address.clone(),
+                spl_associated_token.clone(),
                 spl_vault_associated_address.clone(),
                 nft_owner.clone(),
                 system_program.clone()
