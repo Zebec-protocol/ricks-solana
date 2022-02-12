@@ -224,6 +224,7 @@ impl Processor {
         if passed_time <= 86400 {
             return Err(TokenError::AuctionEnded.into());
         }
+        
         let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
             NFTPREFIX,
             nft_owner.key,
@@ -267,6 +268,66 @@ impl Processor {
         )?;
         Ok(())
     }
+    pub fn process_buy_nft_token2(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let buyer =  next_account_info(account_info_iter)?; // sender or signer
+        let nft_owner = next_account_info(account_info_iter)?; // auction creator
+        let token_mint_info = next_account_info(account_info_iter)?; // token mint 
+        let nft_mint_address = next_account_info(account_info_iter)?; // token mint 
+        let pda_data = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
+        let token_program_id = next_account_info(account_info_iter)?; //TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        let nft_spl_owner_address = next_account_info(account_info_iter)?; // // nft/token vault address generated from NFTPREFIX, nft_owner, pda and program id
+        let spl_vault_associated_address = next_account_info(account_info_iter)?;  // associated token of spl_vault_associated_address
+       let system_program = next_account_info(account_info_iter)?;
+
+        let escrow = NftDetails::try_from_slice(&pda_data.data.borrow())?;
+        let now = Clock::get()?.unix_timestamp as u64; 
+        let passed_time = now - escrow.create_at;
+        
+        let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
+            NFTPREFIX,
+            nft_owner.key,
+            pda_data.key,
+            program_id
+        );
+        let nft_vault_signer_seeds: &[&[_]] = &[
+            NFTPREFIX.as_bytes(),
+            &nft_owner.key.to_bytes(),
+            &pda_data.key.to_bytes(),
+            &[bump_seed],
+        ];
+        invoke_signed(
+            &spl_token::instruction::transfer(
+                token_program_id.key,
+                spl_vault_associated_address.key,
+                buyer.key,
+                nft_spl_owner_address.key,
+                &[nft_spl_owner_address.key],
+                token
+            )?,
+            &[
+                token_program_id.clone(),
+                spl_vault_associated_address.clone(),
+                buyer.clone(),
+                nft_spl_owner_address.clone(),
+                system_program.clone()
+            ],&[&nft_vault_signer_seeds],
+        )?;
+        invoke(
+            &system_instruction::transfer(
+                buyer.key,
+                nft_owner.key,
+                token
+            ),
+            &[
+                buyer.clone(),
+                nft_owner.clone(),
+                system_program.clone()
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
         let instruction = TokenInstruction::unpack(input)?;
         match instruction {

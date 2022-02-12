@@ -17,5 +17,5 @@ pub struct NftDetails{
    pub  nft_mint: Pubkey,
    pub  nft_escrow: Pubkey,
    pub token_mint: Pubkey,
-   pub create_at: u64
+   pub create_at: u64,
 }
