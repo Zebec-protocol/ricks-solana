@@ -13,8 +13,12 @@ pub struct ProcessDeposit{
     pub number_of_tokens: u64,
     pub price: u64,
 }
+pub struct ProcessBuy{
+    pub token: u64,
+}
 pub enum TokenInstruction {
-    ProcessDeposit(ProcessDeposit)
+    ProcessDeposit(ProcessDeposit),
+    ProcessBuy(ProcessBuy),
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -29,6 +33,11 @@ impl TokenInstruction {
                 let number_of_tokens = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 let price = price.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessDeposit(ProcessDeposit{number_of_tokens,price})
+            }
+            1 => {
+                let (number_of_tokens, rest) = rest.split_at(8);
+                let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessBuy(ProcessBuy{token})
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
