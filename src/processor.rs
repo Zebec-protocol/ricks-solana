@@ -4,7 +4,9 @@ use crate::{
         TokenInstruction,
         ProcessDeposit,
         ProcessBuy,
-        ProcessBuy2
+        ProcessBuy2,
+        ProcessCoinFlip,
+        ProcessClaimCoinFlip
     },
     utils::{create_account,generate_pda_and_bump_seed,create_account_signed,create_pda_account},
     SPLTOKENPREFIX,
@@ -377,7 +379,7 @@ impl Processor {
         Ok(())
     }
     // need to improve security using recent blockhash or vrf
-    pub fn process_coin_flip(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
+    pub fn Process_coin_flip(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let player =  next_account_info(account_info_iter)?; // sender or signer
         let nft_owner = next_account_info(account_info_iter)?; // auction creator
@@ -494,13 +496,22 @@ impl Processor {
                 Self::process_deposit_nft(program_id,accounts,number_of_tokens, price)
             }
             TokenInstruction::ProcessBuy(ProcessBuy{token}) => {
-                msg!("Instruction: Sol Stream");
+                msg!("Instruction: Buy token");
                 Self::process_buy_nft_token(program_id,accounts,token)
             }
             TokenInstruction::ProcessBuy2(ProcessBuy2{token}) => {
-                msg!("Instruction: Sol Stream");
+                msg!("Instruction:  Buy token");
                 Self::process_buy_nft_token2(program_id,accounts,token)
             }
+            TokenInstruction::ProcessCoinFlip(ProcessCoinFlip{token}) => {
+                msg!("Instruction:  Flip Coin");
+                Self::Process_coin_flip(program_id,accounts,token)
+            }
+            TokenInstruction::ProcessClaimCoinFlip(ProcessClaimCoinFlip{token}) => {
+                msg!("Instruction:  Claim Token");
+                Self::process_coin_flip_claim(program_id,accounts,token)
+            }
+            
         }
     }
 }

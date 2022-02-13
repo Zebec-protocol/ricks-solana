@@ -19,11 +19,18 @@ pub struct ProcessBuy{
 pub struct ProcessBuy2{
     pub token: u64,
 }
+pub struct ProcessCoinFlip{
+    pub token: u64,
+}
+pub struct ProcessClaimCoinFlip{
+    pub token: u64,
+}
 pub enum TokenInstruction {
     ProcessDeposit(ProcessDeposit),
     ProcessBuy(ProcessBuy),
     ProcessBuy2(ProcessBuy2),
-
+    ProcessCoinFlip(ProcessCoinFlip),
+    ProcessClaimCoinFlip(ProcessClaimCoinFlip)
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -48,6 +55,16 @@ impl TokenInstruction {
                 let (number_of_tokens, rest) = rest.split_at(8);
                 let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessBuy2(ProcessBuy2{token})
+            }
+            3 => {
+                let (number_of_tokens, rest) = rest.split_at(8);
+                let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessCoinFlip(ProcessCoinFlip{token})
+            }
+            4 => {
+                let (number_of_tokens, rest) = rest.split_at(8);
+                let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessClaimCoinFlip(ProcessClaimCoinFlip{token})
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
