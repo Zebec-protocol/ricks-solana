@@ -16,9 +16,14 @@ pub struct ProcessDeposit{
 pub struct ProcessBuy{
     pub token: u64,
 }
+pub struct ProcessBuy2{
+    pub token: u64,
+}
 pub enum TokenInstruction {
     ProcessDeposit(ProcessDeposit),
     ProcessBuy(ProcessBuy),
+    ProcessBuy2(ProcessBuy2),
+
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -38,6 +43,11 @@ impl TokenInstruction {
                 let (number_of_tokens, rest) = rest.split_at(8);
                 let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessBuy(ProcessBuy{token})
+            }
+            2 => {
+                let (number_of_tokens, rest) = rest.split_at(8);
+                let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessBuy2(ProcessBuy2{token})
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
