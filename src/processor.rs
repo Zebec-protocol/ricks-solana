@@ -291,12 +291,11 @@ impl Processor {
 
         let escrow = NftDetails::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64; 
-        let passed_time = (now - escrow.create_at/86400 )as f64;
+        let days = (now - escrow.create_at/86400 )as f64;
         // if passed_time >= 86400 {
         //     return Err(TokenError::AuctionEnded.into());
         // }
-        let days = ((1644740822 - 1641740822)/86400 )as f64;
-        
+        // let days = ((1644740822 - 1641740822)/86400 )as f64;
         let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
             NFTPREFIX,
             nft_owner.key,
@@ -321,26 +320,31 @@ impl Processor {
             &pda_data.key.to_bytes(),
             &[bump_seed_spl],
         ];
-        invoke_signed(
-            &spl_token::instruction::mint_to_checked(
-                token_program_id.key,
-                spl_token_mint.key,
-                spl_vault_associated_address.key,
-                nft_vault.key,
-                &[&nft_vault.key],
-                // escrow.number_of_tokens/100,
-                token,
-                9
-            )?,&[
-                token_program_id.clone(),
-                spl_token_mint.clone(),
-                spl_vault_associated_address.clone(),
-                nft_vault.clone(),
-                nft_vault.clone(),
-                system_program.clone(),
-                rent_info.clone()
-            ],&[nft_vault_signer_seeds,spl_token_signer_seeds]
-        )?;
+        
+        if days < 0 as f64 || days != escrow.days{
+            let calculate_days = (days - escrow.days)as u64; // sometime it might not mint for many more days, if no one buys the nft's fraction
+            let tokens_to_mint: u64 = calculate_days*escrow.number_of_tokens/100;
+            invoke_signed(
+                &spl_token::instruction::mint_to_checked(
+                    token_program_id.key,
+                    spl_token_mint.key,
+                    spl_vault_associated_address.key,
+                    nft_vault.key,
+                    &[&nft_vault.key],
+                    tokens_to_mint,
+                    9
+                )?,&[
+                    token_program_id.clone(),
+                    spl_token_mint.clone(),
+                    spl_vault_associated_address.clone(),
+                    nft_vault.clone(),
+                    nft_vault.clone(),
+                    system_program.clone(),
+                    rent_info.clone()
+                ],&[nft_vault_signer_seeds,spl_token_signer_seeds]
+            )?;
+        }
+
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_id.key,
