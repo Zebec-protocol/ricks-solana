@@ -20,3 +20,8 @@ pub struct NftDetails{
    pub create_at: u64,
    pub days: f64,
 }
+#[repr(C)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+pub struct CoinFlip{
+    pub won: u64
+}

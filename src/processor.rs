@@ -9,7 +9,7 @@ use crate::{
     utils::{create_account,generate_pda_and_bump_seed,create_account_signed,create_pda_account},
     SPLTOKENPREFIX,
     NFTPREFIX,
-    state::{NftDetails}
+    state::{NftDetails,CoinFlip}
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -71,7 +71,7 @@ impl Processor {
             &[bump_seed],
         ];
         let rent = Rent::get()?;
-        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<NftDetails>()+355);
+        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<NftDetails>());
         create_pda_account( 
             nft_owner,
             transfer_amount,
@@ -376,7 +376,113 @@ impl Processor {
         )?;
         Ok(())
     }
+    // need to improve security using recent blockhash or vrf
+    pub fn process_coin_flip(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let player =  next_account_info(account_info_iter)?; // sender or signer
+        let nft_owner = next_account_info(account_info_iter)?; // auction creator
+        let pda_data = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
+        let coinflip_pda = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
+        let token_program_id = next_account_info(account_info_iter)?; //TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        let nft_vault = next_account_info(account_info_iter)?; // nft vault
+        let spl_vault_associated_address = next_account_info(account_info_iter)?;  // find associated address from nft vault and spl token mint
+        let buyer_spl_associated =  next_account_info(account_info_iter)?; // sender or signer
+        let spl_token_mint = next_account_info(account_info_iter)?; // spl token mint
+        let player_associated_token = next_account_info(account_info_iter)?; // spl token mint
+        let system_program = next_account_info(account_info_iter)?; 
+        let rent_info =next_account_info(account_info_iter)?; 
 
+        let now = Clock::get()?.unix_timestamp as u64; 
+        let rent = Rent::get()?;
+        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<CoinFlip>());
+        create_pda_account( 
+            player,
+            transfer_amount,
+            std::mem::size_of::<CoinFlip>(),
+            program_id,
+            system_program,
+            coinflip_pda
+        )?;
+        let mut coinflip = CoinFlip::try_from_slice(&coinflip_pda.data.borrow())?;
+
+        invoke(
+            &spl_token::instruction::transfer(
+                token_program_id.key,
+                player_associated_token.key,
+                spl_vault_associated_address.key,
+                player.key,
+                &[player.key],
+                token
+            )?,
+            &[
+                token_program_id.clone(),
+                player_associated_token.clone(),
+                spl_vault_associated_address.clone(),
+                player.clone(),
+                system_program.clone()
+            ],
+        )?;
+
+        if now % 2 == 0 {
+            coinflip.won = 0
+        }
+        else {
+            coinflip.won = 1
+        }
+        coinflip.serialize(&mut &mut coinflip_pda.data.borrow_mut()[..])?;
+        Ok(())
+    }
+    pub fn process_coin_flip_claim(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let player =  next_account_info(account_info_iter)?; // sender or signer
+        let nft_owner = next_account_info(account_info_iter)?; // auction creator
+        let pda = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
+        let coinflip_pda = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
+        let token_program_id = next_account_info(account_info_iter)?; //TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        let nft_vault = next_account_info(account_info_iter)?; // nft vault
+        let spl_vault_associated_address = next_account_info(account_info_iter)?;  // find associated address from nft vault and spl token mint
+        let buyer_spl_associated =  next_account_info(account_info_iter)?; // sender or signer
+        let spl_token_mint = next_account_info(account_info_iter)?; // spl token mint
+        let player_associated_token = next_account_info(account_info_iter)?; // spl token mint
+        let system_program = next_account_info(account_info_iter)?; 
+        let rent_info =next_account_info(account_info_iter)?; 
+
+        let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
+            NFTPREFIX,
+            nft_owner.key,
+            pda.key,
+            program_id
+        );
+        let nft_vault_signer_seeds: &[&[_]] = &[
+            NFTPREFIX.as_bytes(),
+            &nft_owner.key.to_bytes(),
+            &pda.key.to_bytes(),
+            &[bump_seed],
+        ];
+
+        let coinflip = CoinFlip::try_from_slice(&coinflip_pda.data.borrow())?;
+        if coinflip.won == 1{
+            invoke_signed(
+                &spl_token::instruction::transfer(
+                    token_program_id.key,
+                    spl_vault_associated_address.key,
+                    buyer_spl_associated.key,
+                    nft_vault.key,
+                    &[nft_vault.key],
+                    token
+                )?,
+                &[
+                    token_program_id.clone(),
+                    spl_vault_associated_address.clone(),
+                    buyer_spl_associated.clone(),
+                    nft_vault.clone(),
+                    system_program.clone()
+                ],&[&nft_vault_signer_seeds],
+            )?;
+        }
+        coinflip.serialize(&mut &mut coinflip_pda.data.borrow_mut()[..])?;
+        Ok(())
+    }
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
         let instruction = TokenInstruction::unpack(input)?;
         match instruction {
