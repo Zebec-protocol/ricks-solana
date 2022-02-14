@@ -224,13 +224,17 @@ impl Processor {
         let nft_vault = next_account_info(account_info_iter)?; // nft vault
         let spl_vault_associated_address = next_account_info(account_info_iter)?;  // find associated address from nft vault and spl token mint
         let buyer_spl_associated =  next_account_info(account_info_iter)?; // sender or signer
-
+        let spl_token_mint = next_account_info(account_info_iter)?; 
+        let rent_info = next_account_info(account_info_iter)?; 
+        let associated_token_info = next_account_info(account_info_iter)?; 
        let system_program = next_account_info(account_info_iter)?;
 
         let escrow = NftDetails::try_from_slice(&pda_data.data.borrow())?;
+        msg!("spl: {}", spl_token_mint.key);
+        msg!("token: {}", token);
         let now = Clock::get()?.unix_timestamp as u64; 
         let passed_time = now - escrow.create_at;
-        if passed_time <= 86400 {
+        if passed_time >= 86400 {
             return Err(TokenError::AuctionEnded.into());
         }
         
@@ -246,6 +250,22 @@ impl Processor {
             &pda_data.key.to_bytes(),
             &[bump_seed],
         ];
+        invoke(            
+            &spl_associated_token_account::create_associated_token_account(
+                buyer.key,
+                buyer.key,
+                spl_token_mint.key,
+            ),&[
+                buyer.clone(),
+                buyer_spl_associated.clone(),
+                buyer.clone(),
+                spl_token_mint.clone(),
+                token_program_id.clone(),
+                rent_info.clone(),
+                associated_token_info.clone(),
+                system_program.clone()
+            ]
+        )?;
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_id.key,
@@ -382,17 +402,11 @@ impl Processor {
     pub fn Process_coin_flip(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let player =  next_account_info(account_info_iter)?; // sender or signer
-        let nft_owner = next_account_info(account_info_iter)?; // auction creator
-        let pda_data = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
         let coinflip_pda = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
         let token_program_id = next_account_info(account_info_iter)?; //TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
-        let nft_vault = next_account_info(account_info_iter)?; // nft vault
         let spl_vault_associated_address = next_account_info(account_info_iter)?;  // find associated address from nft vault and spl token mint
-        let buyer_spl_associated =  next_account_info(account_info_iter)?; // sender or signer
-        let spl_token_mint = next_account_info(account_info_iter)?; // spl token mint
         let player_associated_token = next_account_info(account_info_iter)?; // spl token mint
         let system_program = next_account_info(account_info_iter)?; 
-        let rent_info =next_account_info(account_info_iter)?; 
 
         let now = Clock::get()?.unix_timestamp as u64; 
         let rent = Rent::get()?;
@@ -444,10 +458,7 @@ impl Processor {
         let nft_vault = next_account_info(account_info_iter)?; // nft vault
         let spl_vault_associated_address = next_account_info(account_info_iter)?;  // find associated address from nft vault and spl token mint
         let buyer_spl_associated =  next_account_info(account_info_iter)?; // sender or signer
-        let spl_token_mint = next_account_info(account_info_iter)?; // spl token mint
-        let player_associated_token = next_account_info(account_info_iter)?; // spl token mint
         let system_program = next_account_info(account_info_iter)?; 
-        let rent_info =next_account_info(account_info_iter)?; 
 
         let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
             NFTPREFIX,
@@ -501,6 +512,7 @@ impl Processor {
             }
             TokenInstruction::ProcessBuy2(ProcessBuy2{token}) => {
                 msg!("Instruction:  Buy token");
+                msg!("{}",token);
                 Self::process_buy_nft_token2(program_id,accounts,token)
             }
             TokenInstruction::ProcessCoinFlip(ProcessCoinFlip{token}) => {

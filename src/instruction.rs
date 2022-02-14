@@ -1,6 +1,7 @@
 //! Instruction types
 use solana_program::{
     program_error::ProgramError,
+    msg
 };
 use {borsh::{BorshDeserialize}};
 
@@ -37,6 +38,7 @@ impl TokenInstruction {
     pub fn unpack(input: &[u8]) -> Result<Self, ProgramError> {
         use TokenError::InvalidInstruction;
         let (&tag, rest) = input.split_first().ok_or(InvalidInstruction)?;
+        msg!("{:?}",rest);
         Ok(match tag {
             // Initialize deposit NFT instruction 
             0 => {
@@ -47,13 +49,15 @@ impl TokenInstruction {
                 Self::ProcessDeposit(ProcessDeposit{number_of_tokens,price})
             }
             1 => {
-                let (number_of_tokens, rest) = rest.split_at(8);
-                let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let (token, rest) = rest.split_at(8);
+                 let token = token.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessBuy(ProcessBuy{token})
             }
             2 => {
-                let (number_of_tokens, rest) = rest.split_at(8);
-                let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                // let (number_of_tokens, rest) = rest[0]
+                // let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let token = rest[0] as u64;
+                msg!("ss{}",token);
                 Self::ProcessBuy2(ProcessBuy2{token})
             }
             3 => {
