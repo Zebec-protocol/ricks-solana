@@ -38,7 +38,7 @@ impl TokenInstruction {
     pub fn unpack(input: &[u8]) -> Result<Self, ProgramError> {
         use TokenError::InvalidInstruction;
         let (&tag, rest) = input.split_first().ok_or(InvalidInstruction)?;
-        msg!("{:?}",rest);
+        msg!("{:?}",input);
         Ok(match tag {
             // Initialize deposit NFT instruction 
             0 => {
@@ -57,17 +57,15 @@ impl TokenInstruction {
                 // let (number_of_tokens, rest) = rest[0]
                 // let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 let token = rest[0] as u64;
-                msg!("ss{}",token);
                 Self::ProcessBuy2(ProcessBuy2{token})
             }
             3 => {
-                let (number_of_tokens, rest) = rest.split_at(8);
-                let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                msg!("{:?}",rest);
+                let token = rest[0] as u64;
                 Self::ProcessCoinFlip(ProcessCoinFlip{token})
             }
             4 => {
-                let (number_of_tokens, rest) = rest.split_at(8);
-                let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let token = rest[0] as u64;
                 Self::ProcessClaimCoinFlip(ProcessClaimCoinFlip{token})
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
