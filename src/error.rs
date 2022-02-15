@@ -17,6 +17,9 @@ pub enum TokenError {
      // auction ended 
      #[error("auction ended")]
      AuctionEnded,
+     // Overflow
+     #[error("Token overflow")]
+     Overflow,
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {

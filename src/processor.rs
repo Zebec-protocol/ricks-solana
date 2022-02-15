@@ -408,6 +408,7 @@ impl Processor {
         let player_associated_token = next_account_info(account_info_iter)?; // spl token mint
         let system_program = next_account_info(account_info_iter)?; 
 
+        msg!("{}",token);
         let now = Clock::get()?.unix_timestamp as u64; 
         let rent = Rent::get()?;
         let transfer_amount =  rent.minimum_balance(std::mem::size_of::<CoinFlip>());
@@ -420,7 +421,6 @@ impl Processor {
             coinflip_pda
         )?;
         let mut coinflip = CoinFlip::try_from_slice(&coinflip_pda.data.borrow())?;
-
         invoke(
             &spl_token::instruction::transfer(
                 token_program_id.key,
@@ -494,6 +494,11 @@ impl Processor {
             )?;
         }
         coinflip.serialize(&mut &mut coinflip_pda.data.borrow_mut()[..])?;
+        let dest_starting_lamports = player.lamports();
+            **player.lamports.borrow_mut() = dest_starting_lamports
+                .checked_add(coinflip_pda.lamports())
+                .ok_or(TokenError::Overflow)?;
+            **coinflip_pda.lamports.borrow_mut() = 0;
         Ok(())
     }
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
@@ -537,6 +542,8 @@ impl PrintProgramError for TokenError {
             TokenError::NotRentExempt => msg!("Error: Lamport balance below rent-exempt threshold"),
             TokenError::InvalidInstruction => msg!("Error: Invalid instruction"),
             TokenError::AuctionEnded => msg!("Error: Auction Ended"),
+            TokenError::Overflow => msg!("Error: Token Overflow"),
+
         }
     }
 }
