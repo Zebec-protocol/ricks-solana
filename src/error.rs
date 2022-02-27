@@ -20,6 +20,8 @@ pub enum TokenError {
      // Overflow
      #[error("Token overflow")]
      Overflow,
+     #[error("Not started")]
+    Notstarted,
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {

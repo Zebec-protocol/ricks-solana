@@ -4,10 +4,7 @@ use solana_program::{
     system_instruction,
     program::{invoke_signed,invoke},
     entrypoint::ProgramResult,
-    program_error::ProgramError,
-    program_pack::Pack
 };
-use super::error::TokenError;
 
 pub fn create_account<'a>(
     payer: &AccountInfo<'a>,
