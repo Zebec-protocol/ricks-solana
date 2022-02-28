@@ -16,7 +16,9 @@ pub struct NftDetails{
     pub token_mint: Pubkey,
     pub create_at: u64,
     pub days: f64,
+    pub remaining_token:u64,
 }
+
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
 pub struct CoinFlip{

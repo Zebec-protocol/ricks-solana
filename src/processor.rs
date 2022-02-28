@@ -224,6 +224,7 @@ impl Processor {
         escrow.token_mint = *spl_token_mint.key;
         escrow.create_at = now;
         escrow.days = 0 as f64;
+        escrow.remaining_token=number_of_tokens;
         escrow.serialize(&mut &mut pda.data.borrow_mut()[..])?;
         
         let mut auction_init = Auction::try_from_slice(&auction_data.data.borrow())?;
@@ -277,14 +278,14 @@ impl Processor {
         }
         let now = Clock::get()?.unix_timestamp as u64; 
 
-        if now -pda_check.create_at > 86400
+        if (now-pda_check.create_at) < 86400
         {
  
-            return Err(TokenError::AuctionEnded.into());
+            return Err(TokenError::Notstarted.into());
 
         }
 
-        if number_of_tokens >pda_check.number_of_tokens
+        if number_of_tokens > pda_check.number_of_tokens/100
         {
             return Err(TokenError::Overflow.into());
 
@@ -327,7 +328,7 @@ impl Processor {
        Ok(())
 
     }
-    pub fn process_claim_nft_token(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
+    pub fn process_buy_nft_token(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let buyer =  next_account_info(account_info_iter)?; // sender or signer
         let nft_owner = next_account_info(account_info_iter)?; // auction creator
@@ -339,23 +340,20 @@ impl Processor {
         let spl_token_mint = next_account_info(account_info_iter)?; 
         let rent_info = next_account_info(account_info_iter)?; 
         let associated_token_info = next_account_info(account_info_iter)?; 
-        let auction_data = next_account_info(account_info_iter)?;  //auction_data 
         let system_program = next_account_info(account_info_iter)?;
 
-        let escrow = NftDetails::try_from_slice(&pda_data.data.borrow())?;
-        let mut auction_operation = Auction::try_from_slice(&auction_data.data.borrow())?;
-
-        if *buyer.key!=auction_operation.max_payer
-        {
-            return Err(ProgramError::MissingRequiredSignature);   
-        }
+        let mut escrow = NftDetails::try_from_slice(&pda_data.data.borrow())?;
 
         msg!("spl: {}", spl_token_mint.key);
         msg!("token: {}", token);
         let now = Clock::get()?.unix_timestamp as u64; 
         let passed_time = now - escrow.create_at;
-        if passed_time <= 86400 {
-            return Err(TokenError::Notstarted.into());
+        if passed_time >= 86400 {
+            return Err(TokenError::AuctionEnded.into());
+        }
+        if token > escrow.remaining_token
+        {
+            return Err(TokenError::TokenFinished.into());
         }
         let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
             NFTPREFIX,
@@ -398,7 +396,7 @@ impl Processor {
                 buyer_spl_associated.key,
                 nft_vault.key,
                 &[nft_vault.key],
-                auction_operation.num_tokens
+                token,
             )?,
             &[
                 token_program_id.clone(),
@@ -409,20 +407,20 @@ impl Processor {
             ],&[&nft_vault_signer_seeds],
         )?;
 
-        invoke_signed(  
+        invoke(  
                 &system_instruction::transfer(
-                nft_vault.key,
+                buyer.key,
                 nft_owner.key,
-                auction_operation.max_price*auction_operation.num_tokens,    
+                token*escrow.price,    
             ),
                 &[
                 nft_vault.clone(),
+                buyer.clone(),
                 system_program.clone()
-                ],&[&nft_vault_signer_seeds],
+                ],
                 )?;
-        auction_operation.auction_type =2; //change the bidding type now
-        auction_operation.serialize(&mut &mut auction_data.data.borrow_mut()[..])?;
-
+        escrow.remaining_token-=token;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
     pub fn process_buy_nft_token2(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
@@ -646,7 +644,7 @@ impl Processor {
             }
             TokenInstruction::ProcessBuy(ProcessBuy{token}) => {
                 msg!("Instruction: Buy token");
-                Self::process_claim_nft_token(program_id,accounts,token)
+                Self::process_buy_nft_token(program_id,accounts,token)
             }
             TokenInstruction::ProcessBuy2(ProcessBuy2{token}) => {
                 msg!("Instruction:  Buy token");
@@ -680,6 +678,7 @@ impl PrintProgramError for TokenError {
             TokenError::AuctionEnded => msg!("Error: Auction Ended"),
             TokenError::Overflow => msg!("Error: Token Overflow"),
             TokenError::Notstarted =>msg!("Error: Not started"),
+            TokenError::TokenFinished =>msg!("Error: Token Finished"),
         }
     }
 }
