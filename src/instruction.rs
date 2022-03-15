@@ -16,9 +16,10 @@ pub struct ProcessDeposit{
 }
 pub struct ProcessBuy{
     pub token: u64,
+    pub price: u64,
 }
 pub struct ProcessBuy2{
-    pub token: u64,
+    pub day:u64,
 }
 pub struct ProcessCoinFlip{
     pub token: u64,
@@ -54,15 +55,16 @@ impl TokenInstruction {
                 Self::ProcessDeposit(ProcessDeposit{number_of_tokens,price})
             }
             1 => {
-                let (token, _rest) = rest.split_at(8);
-                 let token = token.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
-                Self::ProcessBuy(ProcessBuy{token})
+                let (token, rest) = rest.split_at(8);
+                let token = token.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let (price, _rest) = rest.split_at(8);
+                let price = price.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessBuy(ProcessBuy{token,price})
             }
             2 => {
-                // let (number_of_tokens, rest) = rest[0]
-                // let token = number_of_tokens.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
-                let token = rest[0] as u64;
-                Self::ProcessBuy2(ProcessBuy2{token})
+                let (day, _rest) = rest.split_at(8);
+                let day= day.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessBuy2(ProcessBuy2{day})
             }
             3 => {
                 msg!("{:?}",rest);

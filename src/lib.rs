@@ -14,6 +14,7 @@ use solana_program::{
 };
 pub const SPLTOKENPREFIX: &str = "spl_token";
 pub const NFTPREFIX: &str = "nft";
+pub const AUCTIONPREFIX: &str ="ricks_auction";
 
 entrypoint!(process_instruction);
 fn process_instruction(

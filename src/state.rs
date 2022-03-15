@@ -30,5 +30,5 @@ pub struct Auction{
     pub max_price: u64,
     pub max_payer: Pubkey,
     pub num_tokens: u64,
-    pub auction_type: u32, //either 1 or 2 
+    pub day:u64,
 }

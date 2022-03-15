@@ -24,6 +24,10 @@ pub enum TokenError {
     Notstarted,
     #[error("Token Finished")]
     TokenFinished,
+    #[error("Buy Period Ended")]
+    AuctionStarted,
+    #[error("Price is Lower")]
+    PriceLower,
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {
