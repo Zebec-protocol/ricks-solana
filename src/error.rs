@@ -7,27 +7,36 @@ use thiserror::Error;
 /// Errors that may be returned by the Token program.
 #[derive(Clone, Debug, Eq, Error, FromPrimitive, PartialEq)]
 pub enum TokenError {
-    // 0
     /// Lamport balance below rent-exempt threshold.
     #[error("Lamport balance below rent-exempt threshold")]
-    NotRentExempt,
+    NotRentExempt = 0,
+
     // invalid instruction
     #[error("Invalid instruction")]
     InvalidInstruction,
-     // auction ended 
-     #[error("auction ended")]
-     AuctionEnded,
-     // Overflow
-     #[error("Token overflow")]
-     Overflow,
-     #[error("Not started")]
+
+    // auction ended
+    #[error("auction ended")]
+    AuctionEnded,
+
+    // Overflow
+    #[error("Token overflow")]
+    Overflow,
+
+    #[error("Not started")]
     Notstarted,
+
     #[error("Token Finished")]
     TokenFinished,
+
     #[error("Buy Period Ended")]
     AuctionStarted,
+
     #[error("Price is Lower")]
     PriceLower,
+
+    #[error("Token mint address is not as expected")]
+    InvalidTokenMintAddress,
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {
