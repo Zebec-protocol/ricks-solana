@@ -73,6 +73,7 @@ impl Processor {
             &pda.key.to_bytes(),
             &[bump_seed],
         ];
+
         let rent = Rent::get()?;
         let transfer_amount = rent.minimum_balance(std::mem::size_of::<NftDetails>());
         create_pda_account(
@@ -83,6 +84,7 @@ impl Processor {
             system_program,
             pda, //Data ACCOUNT
         )?;
+
         invoke(
             &system_instruction::transfer(
                 nft_owner.key,
@@ -91,6 +93,7 @@ impl Processor {
             ),
             &[nft_owner.clone(), nft_vault.clone(), system_program.clone()],
         )?;
+
         invoke_signed(
             &system_instruction::create_account(
                 nft_vault.key,
@@ -106,6 +109,7 @@ impl Processor {
             ],
             &[nft_vault_signer_seeds, spl_token_signer_seeds],
         )?;
+
         msg!("Initialize mint");
         invoke_signed(
             &spl_token::instruction::initialize_mint(
@@ -125,6 +129,7 @@ impl Processor {
             ],
             &[nft_vault_signer_seeds, spl_token_signer_seeds],
         )?;
+
         // nft owner associated token using spl token mint
         msg!("Create associated token");
         invoke_signed(
@@ -145,6 +150,7 @@ impl Processor {
             ],
             &[nft_vault_signer_seeds, spl_token_signer_seeds],
         )?;
+
         msg!("minting token");
         invoke_signed(
             &spl_token::instruction::mint_to_checked(
@@ -167,6 +173,7 @@ impl Processor {
             ],
             &[nft_vault_signer_seeds, spl_token_signer_seeds],
         )?;
+
         if nft_associated_address.data_is_empty() {
             invoke(
                 &spl_associated_token_account::create_associated_token_account(
@@ -193,6 +200,7 @@ impl Processor {
                 spl_vault_associated_address.key
             );
         }
+
         msg!("transfer");
         invoke(
             &spl_token::instruction::transfer(
@@ -211,6 +219,7 @@ impl Processor {
                 system_program.clone(),
             ],
         )?;
+
         let now = Clock::get()?.unix_timestamp as u64;
         let mut escrow = NftDetails::try_from_slice(&pda.data.borrow())?;
         escrow.number_of_tokens = number_of_tokens;
@@ -225,6 +234,7 @@ impl Processor {
 
         Ok(())
     }
+
     pub fn auction1(
         program_id: &Pubkey,
         accounts: &[AccountInfo],
@@ -712,15 +722,6 @@ impl PrintProgramError for TokenError {
     where
         E: 'static + std::error::Error + DecodeError<E> + PrintProgramError + FromPrimitive,
     {
-        match self {
-            TokenError::NotRentExempt => msg!("Error: Lamport balance below rent-exempt threshold"),
-            TokenError::InvalidInstruction => msg!("Error: Invalid instruction"),
-            TokenError::AuctionEnded => msg!("Error: Auction Ended"),
-            TokenError::AuctionStarted => msg!("Error: Buy Period Ended"),
-            TokenError::Overflow => msg!("Error: Token Overflow"),
-            TokenError::Notstarted => msg!("Error: Not started"),
-            TokenError::TokenFinished => msg!("Error: Token Finished"),
-            TokenError::PriceLower => msg!("Error: Price is Lower"),
-        }
+        msg!("Error {}", self);
     }
 }
