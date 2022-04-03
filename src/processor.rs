@@ -23,8 +23,9 @@ use solana_program::{
 };
 
 use num_traits::FromPrimitive;
+
 /// Program state handler.
-pub struct Processor {}
+pub struct Processor;
 impl Processor {
     pub fn process_deposit_nft(
         program_id: &Pubkey,
@@ -33,36 +34,54 @@ impl Processor {
         price: u64,
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
-        let nft_owner = next_account_info(account_info_iter)?; // sender or signer
-        let token_program_id = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
-        let pda = next_account_info(account_info_iter)?; // pda data
-        let spl_token_mint = next_account_info(account_info_iter)?; // spl token address generated from SPLTOKENPREFIX, nft_owner, pda and program id
-        let spl_associated_token = next_account_info(account_info_iter)?; // nft owner associated of spl_token_mint
-        let nft_mint = next_account_info(account_info_iter)?; // mint address of nft
-        let nft_vault = next_account_info(account_info_iter)?; // nft vault address from NFTPREFIX, nft_owner, pda and program id
-        let nft_associated_address = next_account_info(account_info_iter)?; // address generated from nft_vault_address and nft mint address
-        let spl_vault_associated_address = next_account_info(account_info_iter)?; // address generated from nft_vault_address and spl token mint address
-        let _nft_spl_owner_address = next_account_info(account_info_iter)?; // // nft/token vault address generated from NFTPREFIX, nft_owner, pda and program id
-        let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
-        let nft_owner_nft_associated = next_account_info(account_info_iter)?; // nft owner nft id
-        let rent_info = next_account_info(account_info_iter)?; // rent
+
+        // sender or signer
+        let nft_owner = next_account_info(account_info_iter)?;
+        // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        let token_program_id = next_account_info(account_info_iter)?;
+        // pda data
+        let pda = next_account_info(account_info_iter)?;
+        // spl token address generated from SPLTOKENPREFIX, nft_owner, pda and program id
+        let spl_token_mint = next_account_info(account_info_iter)?;
+        // nft owner associated of spl_token_mint
+        let spl_associated_token = next_account_info(account_info_iter)?;
+        // mint address of nft
+        let nft_mint = next_account_info(account_info_iter)?;
+        // nft vault address from NFTPREFIX, nft_owner, pda and program id
+        let nft_vault = next_account_info(account_info_iter)?;
+        // address generated from nft_vault_address and nft mint address
+        let nft_associated_address = next_account_info(account_info_iter)?;
+        // address generated from nft_vault_address and spl token mint address
+        let spl_vault_associated_address = next_account_info(account_info_iter)?;
+        // nft/token vault address generated from NFTPREFIX, nft_owner, pda and program id
+        let _nft_spl_owner_address = next_account_info(account_info_iter)?;
+        // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
+        let associated_token_info = next_account_info(account_info_iter)?;
+        // nft owner nft id
+        let nft_owner_nft_associated = next_account_info(account_info_iter)?;
+        // rent
+        let rent_info = next_account_info(account_info_iter)?;
+        // System program account
         let system_program = next_account_info(account_info_iter)?;
 
-        let (spl_token_address, bump_seed_spl) =
+        // Check that received Spl-token-mint address
+        // is same as spl-token-addess derived from SPLTOKENPREFIX,
+        // nft_owner, rpogram_id as pda key
+        let (expected_spl_token_mint, bump_seed_spl) =
             generate_pda_and_bump_seed(SPLTOKENPREFIX, nft_owner.key, pda.key, program_id);
-
-        // Verify that token mint is as expected
-        if spl_token_address != *spl_token_mint.key {
+        if expected_spl_token_mint != *spl_token_mint.key {
             return Err(TokenError::InvalidTokenMintAddress.into());
         }
-
         let spl_token_signer_seeds: &[&[_]] = &[
             SPLTOKENPREFIX.as_bytes(),
             &nft_owner.key.to_bytes(),
             &pda.key.to_bytes(),
             &[bump_seed_spl],
         ];
-        let (nft_vault_address, bump_seed) =
+
+        // Associated token address must be same as vault address derived from
+        // NFTPREFIX, nft_owner, pda.key and ptogram_id
+        let (nft_vault_address, nft_vault_bump_seed) =
             generate_pda_and_bump_seed(NFTPREFIX, nft_owner.key, pda.key, program_id);
         if nft_vault_address != *spl_associated_token.key {
             return Err(ProgramError::MissingRequiredSignature);
@@ -71,7 +90,7 @@ impl Processor {
             NFTPREFIX.as_bytes(),
             &nft_owner.key.to_bytes(),
             &pda.key.to_bytes(),
-            &[bump_seed],
+            &[nft_vault_bump_seed],
         ];
 
         let rent = Rent::get()?;
@@ -362,6 +381,7 @@ impl Processor {
 
         Ok(())
     }
+
     pub fn process_buy_nft_token(
         program_id: &Pubkey,
         accounts: &[AccountInfo],
@@ -454,6 +474,7 @@ impl Processor {
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
+
     pub fn process_buy_nft_token2(
         program_id: &Pubkey,
         accounts: &[AccountInfo],
@@ -569,6 +590,7 @@ impl Processor {
 
         Ok(())
     }
+
     // need to improve security using recent blockhash or vrf
     pub fn process_coin_flip(
         program_id: &Pubkey,
@@ -623,6 +645,7 @@ impl Processor {
         coinflip.serialize(&mut &mut coinflip_pda.data.borrow_mut()[..])?;
         Ok(())
     }
+
     pub fn process_coin_flip_claim(
         program_id: &Pubkey,
         accounts: &[AccountInfo],
@@ -680,6 +703,7 @@ impl Processor {
         **coinflip_pda.lamports.borrow_mut() = 0;
         Ok(())
     }
+
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
         let instruction = TokenInstruction::unpack(input)?;
         match instruction {
