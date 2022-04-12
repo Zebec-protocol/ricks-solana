@@ -809,23 +809,35 @@ impl Processor {
             )?;
         
 
-        invoke_signed(
-            &spl_token::instruction::transfer(
-                token_program_id.key,
-                spl_vault_associated_address.key,
-                buyer_spl_associated.key,
-                nft_vault.key,
-                &[nft_vault.key],
-                coinflip.amount,
-            )?,
-            &[
-                token_program_id.clone(),
-                spl_vault_associated_address.clone(),
-                buyer_spl_associated.clone(),
-                nft_vault.clone(),
-                system_program.clone()
-            ],&[&nft_vault_signer_seeds],
-        )?;
+            invoke_signed(
+                &spl_token::instruction::transfer(
+                    token_program_id.key,
+                    spl_vault_associated_address.key,
+                    buyer_spl_associated.key,
+                    nft_vault.key,
+                    &[nft_vault.key],
+                    coinflip.amount,
+                )?,
+                &[
+                    token_program_id.clone(),
+                    spl_vault_associated_address.clone(),
+                    buyer_spl_associated.clone(),
+                    nft_vault.clone(),
+                    system_program.clone()
+                ],&[&nft_vault_signer_seeds],
+            )?;
+            invoke(
+                &system_instruction::transfer
+                (
+                    player.key, 
+                    nft_owner.key, 
+                    coinflip.amount*pda_check.price,
+                ),
+                   &[
+                       player.clone(),
+                       nft_owner.clone(),
+                       system_program.clone(),
+                   ])?;
         pda_check.number_of_tokens+=coinflip.amount;
            
         }
