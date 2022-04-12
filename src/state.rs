@@ -22,7 +22,9 @@ pub struct NftDetails{
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
 pub struct CoinFlip{
-    pub won: u64
+    pub won: u64,
+    pub address: Pubkey,
+    pub amount: u64,
 }
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]

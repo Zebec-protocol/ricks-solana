@@ -9,7 +9,7 @@ use crate::{
         ProcessClaimCoinFlip,
         ProcessAuction1,
     },
-    utils::{generate_pda_and_bump_seed,create_pda_account},
+    utils::{generate_pda_and_bump_seed,create_pda_account,get_token_balance},
     SPLTOKENPREFIX,
     NFTPREFIX,
     AUCTIONPREFIX,
@@ -45,18 +45,22 @@ impl Processor {
         let nft_vault = next_account_info(account_info_iter)?;  // nft vault address from NFTPREFIX, nft_owner, pda and program id
         let nft_associated_address = next_account_info(account_info_iter)?; // address generated from nft_vault_address and nft mint address
         let spl_vault_associated_address = next_account_info(account_info_iter)?; // address generated from nft_vault_address and spl token mint address
-        let _nft_spl_owner_address = next_account_info(account_info_iter)?; // // nft/token vault address generated from NFTPREFIX, nft_owner, pda and program id
+        let _nft_spl_owner_address = next_account_info(account_info_iter)?; // // nft/token vault address generated from spltoken mint, nft_owner, pda and program id
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let nft_owner_nft_associated = next_account_info(account_info_iter)?;  // nft owner nft id
         let rent_info  = next_account_info(account_info_iter)?; // rent 
         let system_program = next_account_info(account_info_iter)?;
 
-        let (_spl_token_address, bump_seed_spl) = generate_pda_and_bump_seed(
+        let (spl_token_address, bump_seed_spl) = generate_pda_and_bump_seed(
             SPLTOKENPREFIX,
             nft_owner.key,
             pda.key,
             program_id
         );
+        if spl_token_address!=*spl_token_mint.key
+        {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
         let spl_token_signer_seeds: &[&[_]] = &[
             SPLTOKENPREFIX.as_bytes(),
             &nft_owner.key.to_bytes(),
@@ -269,13 +273,15 @@ impl Processor {
 
         if (now-pda_check.create_at) < 86400
         {
- 
+            
+            msg!("The auction period has not started yet");
             return Err(TokenError::Notstarted.into());
 
         }
         let day:u64= (now-pda_check.create_at)%86400;
         if number_of_tokens <= pda_check.number_of_tokens/100
         {
+            msg!("You must pay for 1% mint");
             return Err(TokenError::Overflow.into());
 
         }
@@ -371,7 +377,8 @@ impl Processor {
             &[
             nft_vault.clone(),
             system_program.clone(),
-            ],&[&nft_vault_signer_seeds],
+            ],
+            &[&nft_vault_signer_seeds],
             )?;
 
 
@@ -402,7 +409,7 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let buyer =  next_account_info(account_info_iter)?; // sender or signer
         let nft_owner = next_account_info(account_info_iter)?; // auction creator
-        let pda_data = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
+        let pda_data = next_account_info(account_info_iter)?; // pda data that consists number of tokens 
         let token_program_id = next_account_info(account_info_iter)?; //TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let nft_vault = next_account_info(account_info_iter)?; // nft vault
         let spl_vault_associated_address = next_account_info(account_info_iter)?;  // find associated address from nft vault and spl token mint
@@ -419,14 +426,17 @@ impl Processor {
         let now = Clock::get()?.unix_timestamp as u64; 
         let passed_time = now - escrow.create_at;
         if passed_time >= 86400 {
+            msg!("The buying period has ended you can only auction now");
             return Err(TokenError::AuctionStarted.into());
         }
         if token > escrow.remaining_token
         {
+            msg!("The remaining token is only {}",escrow.remaining_token);
             return Err(TokenError::TokenFinished.into());
         }
         if price < escrow.price
         {
+            msg!("The price is lower then set");
             return Err(TokenError::PriceLower.into());
         }
         let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
@@ -499,6 +509,7 @@ impl Processor {
         Ok(())
     }
     pub fn process_buy_nft_token2(program_id: &Pubkey,accounts: &[AccountInfo],day:u64)-> ProgramResult {
+        //The winner of the auction can claim the tokens
         let account_info_iter = &mut accounts.iter();
         let buyer =  next_account_info(account_info_iter)?; // sender or signer
         let nft_owner = next_account_info(account_info_iter)?; // auction creator
@@ -510,7 +521,8 @@ impl Processor {
         let spl_token_mint = next_account_info(account_info_iter)?; // spl token mint
         let system_program = next_account_info(account_info_iter)?; 
         let rent_info =next_account_info(account_info_iter)?; 
-        let auction_data=next_account_info(account_info_iter)?; 
+        let auction_data=next_account_info(account_info_iter)?;
+        let associated_token_info= next_account_info(account_info_iter)?;
 
         let escrow = NftDetails::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64; 
@@ -554,6 +566,7 @@ impl Processor {
         );
         if auction_data.data_is_empty()
         {
+            msg!("The auction data is empty");
             return Err(TokenError::Notstarted.into());
         }
         if auction_address!=*auction_data.key && auction_data.owner !=program_id
@@ -564,10 +577,31 @@ impl Processor {
         let mut auction_operation = Auction::try_from_slice(&auction_data.data.borrow())?;
         if day!=auction_operation.day && day<days
         {
+            msg!("The day after auction doesn't match");
             return Err(TokenError::Notstarted.into());
 
         }
         if auction_operation.max_payer==*buyer.key&& auction_operation.max_price!=0{
+            if buyer_spl_associated.data_is_empty()
+            {
+                invoke(            
+                    &spl_associated_token_account::create_associated_token_account(
+                        buyer.key,
+                        buyer_spl_associated.key,
+                        spl_token_mint.key,
+                    ),&[
+                        buyer.clone(),
+                        spl_token_mint.clone(),
+                        buyer_spl_associated.clone(),
+                        nft_vault.clone(),
+                        token_program_id.clone(),
+                        rent_info.clone(),
+                        associated_token_info.clone(),
+                        system_program.clone()
+                    ]
+                )?;
+
+            }
                 invoke_signed(
                 &spl_token::instruction::mint_to_checked(
                     token_program_id.key,
@@ -623,7 +657,7 @@ impl Processor {
         Ok(())
     }
     // need to improve security using recent blockhash or vrf
-    pub fn process_coin_flip(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
+    pub fn process_coin_flip(program_id: &Pubkey,accounts: &[AccountInfo],_token:u64)-> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let player =  next_account_info(account_info_iter)?; // sender or signer
         let coinflip_pda = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
@@ -631,11 +665,33 @@ impl Processor {
         let spl_vault_associated_address = next_account_info(account_info_iter)?;  // find associated address from nft vault and spl token mint
         let player_associated_token = next_account_info(account_info_iter)?; // spl token mint
         let system_program = next_account_info(account_info_iter)?; 
+        let pda =next_account_info(account_info_iter)?;  // main data account
 
-        msg!("{}",token);
+        if !player.is_signer
+        {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
         let now = Clock::get()?.unix_timestamp as u64; 
         let rent = Rent::get()?;
         let transfer_amount =  rent.minimum_balance(std::mem::size_of::<CoinFlip>());
+        if pda.owner!=program_id
+        {
+            return Err(ProgramError::MissingRequiredSignature);   
+        }
+        let  pda_check = NftDetails::try_from_slice(&pda.data.borrow())?;
+        let token_balance=get_token_balance(player_associated_token)?;
+
+        if player_associated_token.data_is_empty()
+        {
+            msg!("You don't have token at all");
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+        if token_balance < (pda_check.number_of_tokens*2)/3
+        {
+            msg!("You don't have enough tokens");
+            return Err(ProgramError::MissingRequiredSignature);   
+        }
+
         create_pda_account( 
             player,
             transfer_amount,
@@ -644,6 +700,7 @@ impl Processor {
             system_program,
             coinflip_pda
         )?;
+
         let mut coinflip = CoinFlip::try_from_slice(&coinflip_pda.data.borrow())?;
         invoke(
             &spl_token::instruction::transfer(
@@ -652,7 +709,7 @@ impl Processor {
                 spl_vault_associated_address.key,
                 player.key,
                 &[player.key],
-                token
+                token_balance/1000,
             )?,
             &[
                 token_program_id.clone(),
@@ -665,15 +722,19 @@ impl Processor {
 
         //use recent blockhash
         if now % 2 == 0 {
+            msg!("You have lost");
             coinflip.won = 0
         }
         else {
-            coinflip.won = 1
+            msg!("You have won, claim the reward");
+            coinflip.won = 1;
+            coinflip.address=*player.key;
+            coinflip.amount=pda_check.number_of_tokens/100; //1% of total tokens
         }
         coinflip.serialize(&mut &mut coinflip_pda.data.borrow_mut()[..])?;
         Ok(())
     }
-    pub fn process_coin_flip_claim(program_id: &Pubkey,accounts: &[AccountInfo],token:u64)-> ProgramResult {
+    pub fn process_coin_flip_claim(program_id: &Pubkey,accounts: &[AccountInfo],_token:u64)-> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let player =  next_account_info(account_info_iter)?; // sender or signer
         let nft_owner = next_account_info(account_info_iter)?; // auction creator
@@ -683,8 +744,16 @@ impl Processor {
         let nft_vault = next_account_info(account_info_iter)?; // nft vault
         let spl_vault_associated_address = next_account_info(account_info_iter)?;  // find associated address from nft vault and spl token mint
         let buyer_spl_associated =  next_account_info(account_info_iter)?; // sender or signer
+        let spl_token_mint=next_account_info(account_info_iter)?;
         let system_program = next_account_info(account_info_iter)?; 
+        let rent_info=next_account_info(account_info_iter)?; 
 
+
+        let  mut pda_check = NftDetails::try_from_slice(&pda.data.borrow())?;
+        if pda.owner !=program_id && coinflip_pda.owner!=program_id
+        {
+            return Err(ProgramError::MissingRequiredSignature);   
+        }
         let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
             NFTPREFIX,
             nft_owner.key,
@@ -701,33 +770,68 @@ impl Processor {
             &pda.key.to_bytes(),
             &[bump_seed],
         ];
-
+        let (spl_token_address, bump_seed_spl) = generate_pda_and_bump_seed(
+            SPLTOKENPREFIX,
+            nft_owner.key,
+            pda.key,
+            program_id
+        );
+        if spl_token_address!=*spl_token_mint.key
+        {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+        let spl_token_signer_seeds: &[&[_]] = &[
+            SPLTOKENPREFIX.as_bytes(),
+            &nft_owner.key.to_bytes(),
+            &pda.key.to_bytes(),
+            &[bump_seed_spl],
+        ];
         let coinflip = CoinFlip::try_from_slice(&coinflip_pda.data.borrow())?;
-        if coinflip.won == 1{
+        if coinflip.won == 1 && coinflip.address == *player.key{
             invoke_signed(
-                &spl_token::instruction::transfer(
+                &spl_token::instruction::mint_to_checked(
                     token_program_id.key,
+                    spl_token_mint.key,
                     spl_vault_associated_address.key,
-                    buyer_spl_associated.key,
                     nft_vault.key,
-                    &[nft_vault.key],
-                    token
-                )?,
-                &[
+                    &[&nft_vault.key],
+                    coinflip.amount,
+                    9
+                )?,&[
                     token_program_id.clone(),
+                    spl_token_mint.clone(),
                     spl_vault_associated_address.clone(),
-                    buyer_spl_associated.clone(),
                     nft_vault.clone(),
-                    system_program.clone()
-                ],&[&nft_vault_signer_seeds],
+                    nft_vault.clone(),
+                    system_program.clone(),
+                    rent_info.clone()
+                ],&[nft_vault_signer_seeds,spl_token_signer_seeds]
             )?;
+        
+
+        invoke_signed(
+            &spl_token::instruction::transfer(
+                token_program_id.key,
+                spl_vault_associated_address.key,
+                buyer_spl_associated.key,
+                nft_vault.key,
+                &[nft_vault.key],
+                coinflip.amount,
+            )?,
+            &[
+                token_program_id.clone(),
+                spl_vault_associated_address.clone(),
+                buyer_spl_associated.clone(),
+                nft_vault.clone(),
+                system_program.clone()
+            ],&[&nft_vault_signer_seeds],
+        )?;
+        pda_check.number_of_tokens+=coinflip.amount;
+           
         }
         coinflip.serialize(&mut &mut coinflip_pda.data.borrow_mut()[..])?;
-        let dest_starting_lamports = player.lamports();
-            **player.lamports.borrow_mut() = dest_starting_lamports
-                .checked_add(coinflip_pda.lamports())
-                .ok_or(TokenError::Overflow)?;
-            **coinflip_pda.lamports.borrow_mut() = 0;
+        pda_check.serialize(&mut &mut pda.data.borrow_mut()[..])?;
+
         Ok(())
     }
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
