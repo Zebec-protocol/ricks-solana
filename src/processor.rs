@@ -40,7 +40,7 @@ impl Processor {
         let token_program_id = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let pda = next_account_info(account_info_iter)?; // pda data 
         let spl_token_mint = next_account_info(account_info_iter)?;  // spl token address generated from SPLTOKENPREFIX, nft_owner, pda and program id
-        let spl_associated_token = next_account_info(account_info_iter)?; // nft owner associated of spl_token_mint 
+        let _spl_associated_token = next_account_info(account_info_iter)?; // nft owner associated of spl_token_mint 
         let nft_mint = next_account_info(account_info_iter)?;  // mint address of nft
         let nft_vault = next_account_info(account_info_iter)?;  // nft vault address from NFTPREFIX, nft_owner, pda and program id
         let nft_associated_address = next_account_info(account_info_iter)?; // address generated from nft_vault_address and nft mint address
@@ -73,7 +73,7 @@ impl Processor {
             pda.key,
             program_id
         );
-        if nft_vault_address!=*spl_associated_token.key
+        if nft_vault_address!=*nft_vault.key
         {
             return Err(ProgramError::MissingRequiredSignature);
         }
@@ -227,15 +227,15 @@ impl Processor {
         
         Ok(())
     }
-    pub fn auction1(program_id: &Pubkey,accounts: &[AccountInfo],number_of_tokens: u64, price:u64)->ProgramResult
+    pub fn auction1(program_id: &Pubkey,accounts: &[AccountInfo], price:u64)->ProgramResult
     {
         let account_info_iter = &mut accounts.iter();
         let bidder =  next_account_info(account_info_iter)?; // sender or signer
         let nft_owner = next_account_info(account_info_iter)?; // auction creator
         let pda_data = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
         let nft_vault = next_account_info(account_info_iter)?; // nft vault which saves the amount 
-        let auction_data = next_account_info(account_info_iter)?; //account made using 
-        let system_program = next_account_info(account_info_iter)?;
+        let auction_data = next_account_info(account_info_iter)?; //account made using Auction Prefix, Nft owner and Day
+        let system_program = next_account_info(account_info_iter)?;//system_program
         let rent_info  = next_account_info(account_info_iter)?; // rent 
 
         if !bidder.is_signer
@@ -265,6 +265,7 @@ impl Processor {
             &[bump_seed],
         ];
         let  mut pda_check = NftDetails::try_from_slice(&pda_data.data.borrow())?;
+        let num_of_token=pda_check.number_of_tokens/100;
         if *nft_vault.key != pda_check.nft_escrow
         {
             return Err(ProgramError::MissingRequiredSignature);   
@@ -278,27 +279,29 @@ impl Processor {
             return Err(TokenError::Notstarted.into());
 
         }
-        let day:u64= (now-pda_check.create_at)%86400;
-        if number_of_tokens <= pda_check.number_of_tokens/100
-        {
-            msg!("You must pay for 1% mint");
-            return Err(TokenError::Overflow.into());
-
-        }
+        let day:u64= (now-pda_check.create_at)/86400;
+        let day_ip=day.to_string();
         let (auction_address,auction_bump)= Pubkey::find_program_address(
             &[
                 AUCTIONPREFIX.as_bytes(),
                 &nft_owner.key.to_bytes(),
-                &[day as u8],
+                day_ip.as_bytes(),
             ],
             program_id,
         );
+        
         let auction_signer_seeds: &[&[_]] = &[
             AUCTIONPREFIX.as_bytes(),
             &nft_owner.key.to_bytes(),
-            &[day as u8],
+            day_ip.as_bytes(),
             &[auction_bump],
         ];
+        msg!("The day is: {}",day);
+        if *auction_data.key!=auction_address 
+        {
+            msg!("auction address don't match {}",auction_address);
+            return Err(ProgramError::MissingRequiredSignature);  
+        }
         let mut flag:u8=0;
         if auction_data.data_is_empty()
         {
@@ -338,7 +341,7 @@ impl Processor {
         }
         else
         {
-            if *auction_data.key!=auction_address && auction_data.owner!=program_id
+            if auction_data.owner!=program_id
             {
                 return Err(ProgramError::MissingRequiredSignature);   
             }
@@ -352,7 +355,7 @@ impl Processor {
                 &system_instruction::transfer(
                     bidder.key,
                     nft_vault.key,
-                    number_of_tokens*price,
+                    price,
                 ),
                 &[
                     bidder.clone(),
@@ -361,21 +364,28 @@ impl Processor {
                 ],
             )?;
             auction_operation.max_payer = *bidder.key;
-            auction_operation.num_tokens = number_of_tokens;
+            auction_operation.num_tokens = num_of_token;
+            auction_operation.max_price=price;
             auction_operation.day=day;
 
         }
         else if price > auction_operation.max_price 
         {
+            let max_payer=next_account_info(account_info_iter)?; // previous maximum payer obtained by deserializing auction_data
+            if *max_payer.key!=auction_operation.max_payer
+            {
+                return Err(ProgramError::MissingRequiredSignature);   
+            }
             //release amount of previous highest bidder
             invoke_signed(  
                 &system_instruction::transfer(
                 nft_vault.key,
-                &auction_operation.max_payer,
-                auction_operation.max_price*auction_operation.num_tokens,    
+                max_payer.key,
+                auction_operation.max_price,    
             ),
             &[
             nft_vault.clone(),
+            max_payer.clone(),
             system_program.clone(),
             ],
             &[&nft_vault_signer_seeds],
@@ -383,12 +393,13 @@ impl Processor {
 
 
             auction_operation.max_payer = *bidder.key;
-            auction_operation.num_tokens = number_of_tokens;
+            auction_operation.num_tokens = num_of_token;
+            auction_operation.max_price=price;
             invoke(
                 &system_instruction::transfer(
                     bidder.key,
                     nft_vault.key,
-                    number_of_tokens*price,
+                    price,
                 ),
                 &[
                     bidder.clone(),
@@ -456,7 +467,8 @@ impl Processor {
             &pda_data.key.to_bytes(),
             &[bump_seed],
         ];
-
+        if buyer_spl_associated.data_is_empty()
+        {
         invoke(            
             &spl_associated_token_account::create_associated_token_account(
                 buyer.key,
@@ -473,6 +485,7 @@ impl Processor {
                 system_program.clone()
             ]
         )?;
+        }
         invoke(  
             &system_instruction::transfer(
             buyer.key,
@@ -481,6 +494,7 @@ impl Processor {
         ),
             &[
             nft_vault.clone(),
+            nft_owner.clone(),
             buyer.clone(),
             system_program.clone()
             ],
@@ -526,7 +540,7 @@ impl Processor {
 
         let escrow = NftDetails::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64; 
-        let days = (now - escrow.create_at)%86400;
+        let days = (now - escrow.create_at)/86400;
         let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
             NFTPREFIX,
             nft_owner.key,
@@ -872,9 +886,9 @@ impl Processor {
                 msg!("Instruction:  Claim Token");
                 Self::process_coin_flip_claim(program_id,accounts,token)
             }
-            TokenInstruction::ProcessAuction1(ProcessAuction1{number_of_tokens,price}) => {
-                msg!("Instruction:  Claim Token");
-                Self::auction1(program_id, accounts, number_of_tokens, price)
+            TokenInstruction::ProcessAuction1(ProcessAuction1{price}) => {
+                msg!("Instruction:  Auction");
+                Self::auction1(program_id, accounts, price)
             }
     }
 }
