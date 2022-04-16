@@ -570,11 +570,12 @@ impl Processor {
             &pda_data.key.to_bytes(),
             &[bump_seed_spl],
         ];
+        let day_ip=day.to_string();
         let (auction_address,_auction_bump)= Pubkey::find_program_address(
             &[
                 AUCTIONPREFIX.as_bytes(),
                 &nft_owner.key.to_bytes(),
-                &[day as u8],
+                day_ip.as_bytes(),
             ],
             program_id,
         );
@@ -635,7 +636,7 @@ impl Processor {
                     rent_info.clone()
                 ],&[nft_vault_signer_seeds,spl_token_signer_seeds]
             )?;
-        }
+        
 
         invoke_signed(
             &spl_token::instruction::transfer(
@@ -658,7 +659,7 @@ impl Processor {
             &system_instruction::transfer(
             nft_vault.key,
             nft_owner.key,
-            auction_operation.max_price*auction_operation.num_tokens,    
+            auction_operation.max_price,    
         ),
             &[
             nft_vault.clone(),
@@ -666,7 +667,13 @@ impl Processor {
             system_program.clone(),
             ],&[&nft_vault_signer_seeds],
             )?;
-            auction_operation.max_price=0;
+        auction_operation.max_price=0;
+        }
+        else
+        {
+            msg!("You have already claimed or not the winner");
+        }
+
 
         Ok(())
     }
