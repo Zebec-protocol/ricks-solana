@@ -13,6 +13,7 @@ pub struct NftDetails{
     pub price: u64,
     pub nft_mint: Pubkey,
     pub nft_escrow: Pubkey,
+    pub nft_owner:Pubkey,
     pub token_mint: Pubkey,
     pub create_at: u64,
     pub days: f64,
