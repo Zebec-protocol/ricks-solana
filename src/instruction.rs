@@ -21,12 +21,7 @@ pub struct ProcessBuy{
 pub struct ProcessBuy2{
     pub day:u64,
 }
-pub struct ProcessCoinFlip{
-    pub token: u64,
-}
-pub struct ProcessClaimCoinFlip{
-    pub token: u64,
-}
+
 pub struct ProcessAuction1{
     pub price: u64,
 }
@@ -34,8 +29,8 @@ pub enum TokenInstruction {
     ProcessDeposit(ProcessDeposit),
     ProcessBuy(ProcessBuy),
     ProcessBuy2(ProcessBuy2),
-    ProcessCoinFlip(ProcessCoinFlip),
-    ProcessClaimCoinFlip(ProcessClaimCoinFlip),
+    ProcessCoinFlip,
+    ProcessClaimCoinFlip,
     ProcessAuction1(ProcessAuction1)
 }
 impl TokenInstruction {
@@ -67,12 +62,10 @@ impl TokenInstruction {
             }
             3 => {
                 msg!("{:?}",rest);
-                let token = rest[0] as u64;
-                Self::ProcessCoinFlip(ProcessCoinFlip{token})
+                Self::ProcessCoinFlip
             }
             4 => {
-                let token = rest[0] as u64;
-                Self::ProcessClaimCoinFlip(ProcessClaimCoinFlip{token})
+                Self::ProcessClaimCoinFlip
             }
             5 => {
                 let (price, _rest) = rest.split_at(8);

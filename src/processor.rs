@@ -5,8 +5,6 @@ use crate::{
         ProcessDeposit,
         ProcessBuy,
         ProcessBuy2,
-        ProcessCoinFlip,
-        ProcessClaimCoinFlip,
         ProcessAuction1,
     },
     utils::{generate_pda_and_bump_seed,create_pda_account,get_token_balance},
@@ -824,7 +822,7 @@ impl Processor {
         Ok(())
     }
     // need to improve security using recent blockhash or vrf
-    pub fn process_coin_flip(program_id: &Pubkey,accounts: &[AccountInfo],_token:u64)-> ProgramResult {
+    pub fn process_coin_flip(program_id: &Pubkey,accounts: &[AccountInfo],)-> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let player =  next_account_info(account_info_iter)?; // sender or signer
         let coinflip_pda = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
@@ -938,12 +936,13 @@ impl Processor {
         coinflip.serialize(&mut &mut coinflip_pda.data.borrow_mut()[..])?;
         Ok(())
     }
-    pub fn process_coin_flip_claim(program_id: &Pubkey,accounts: &[AccountInfo],_token:u64)-> ProgramResult {
+    pub fn process_coin_flip_claim(program_id: &Pubkey,accounts: &[AccountInfo],)-> ProgramResult {
+        msg!("Inside the function");
         let account_info_iter = &mut accounts.iter();
         let player =  next_account_info(account_info_iter)?; // sender or signer
         let nft_owner = next_account_info(account_info_iter)?; // auction creator
         let pda = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
-        let coinflip_pda = next_account_info(account_info_iter)?; // pda data that consists number of tokens , auction created
+        let coinflip_pda = next_account_info(account_info_iter)?; // pda data for coinflip
         let token_program_id = next_account_info(account_info_iter)?; //TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let nft_vault = next_account_info(account_info_iter)?; // nft vault
         let spl_vault_associated_address = next_account_info(account_info_iter)?;  // find associated address from nft vault and spl token mint
@@ -952,10 +951,20 @@ impl Processor {
         let system_program = next_account_info(account_info_iter)?; 
         let rent_info=next_account_info(account_info_iter)?; 
 
+        if !player.is_signer
+        {
+            msg!("The player is not the signer");
+            return Err(ProgramError::MissingRequiredSignature);
 
+        }
+        msg!("PDA deserialization");
         let  mut pda_check = NftDetails::try_from_slice(&pda.data.borrow())?;
+        msg!("Coinflip Deserialization");
+        let mut coinflip = CoinFlip::try_from_slice(&coinflip_pda.data.borrow())?;
+        msg!("Deserialization Complete");
         if pda.owner !=program_id && coinflip_pda.owner!=program_id
         {
+            msg!("The owner of pda or coinflip pda doesn't match");
             return Err(ProgramError::MissingRequiredSignature);   
         }
         let (nft_vault_address, bump_seed) = generate_pda_and_bump_seed(
@@ -966,6 +975,7 @@ impl Processor {
         );
         if nft_vault_address != *nft_vault.key
         {
+            msg!("NFT vault address doens't match");
             return Err(ProgramError::MissingRequiredSignature);   
         }
         let nft_vault_signer_seeds: &[&[_]] = &[
@@ -982,6 +992,7 @@ impl Processor {
         );
         if spl_token_address!=*spl_token_mint.key
         {
+            msg!("Mint address doesn't match");
             return Err(ProgramError::MissingRequiredSignature);
         }
         let spl_token_signer_seeds: &[&[_]] = &[
@@ -1002,9 +1013,10 @@ impl Processor {
             msg!("SPL token account of the vault doesn't matches");
             return Err(ProgramError::MissingRequiredSignature);
         }
-        let mut coinflip = CoinFlip::try_from_slice(&coinflip_pda.data.borrow())?;
         if coinflip.won == 1 && coinflip.address == *player.key
         {
+            msg!("The winner is verified");
+            msg!("Minting tokens");
             invoke_signed(
                 &spl_token::instruction::mint_to_checked(
                     token_program_id.key,
@@ -1024,7 +1036,7 @@ impl Processor {
                     rent_info.clone()
                 ],&[nft_vault_signer_seeds,spl_token_signer_seeds]
             )?;
-        
+            msg!("Transfering tokens ....");
 
             invoke_signed(
                 &spl_token::instruction::transfer(
@@ -1043,6 +1055,7 @@ impl Processor {
                     system_program.clone()
                 ],&[&nft_vault_signer_seeds],
             )?;
+            msg!("Transfering SOL to owner");
             invoke(
                 &system_instruction::transfer
                 (
@@ -1086,13 +1099,13 @@ impl Processor {
                 msg!("Instruction:  Buy token");
                 Self::process_buy_nft_token2(program_id,accounts,day)
             }
-            TokenInstruction::ProcessCoinFlip(ProcessCoinFlip{token}) => {
+            TokenInstruction::ProcessCoinFlip => {
                 msg!("Instruction:  Flip Coin");
-                Self::process_coin_flip(program_id,accounts,token)
+                Self::process_coin_flip(program_id,accounts)
             }
-            TokenInstruction::ProcessClaimCoinFlip(ProcessClaimCoinFlip{token}) => {
+            TokenInstruction::ProcessClaimCoinFlip => {
                 msg!("Instruction:  Claim Token");
-                Self::process_coin_flip_claim(program_id,accounts,token)
+                Self::process_coin_flip_claim(program_id,accounts)
             }
             TokenInstruction::ProcessAuction1(ProcessAuction1{price}) => {
                 msg!("Instruction:  Auction");
