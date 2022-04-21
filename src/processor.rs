@@ -928,7 +928,8 @@ impl Processor {
             msg!("You have lost");
             coinflip.won = 0
         }
-        else {
+        else 
+        {
             msg!("You have won, claim the reward");
             coinflip.won = 1;
             coinflip.address=*player.key;
